@@ -46,6 +46,11 @@ def group_stats(group_by, agg="sum", metric="sales", top_n=10, filters=None):
     df, err = _apply_filters(DF, filters)
     if err:
         return err
+    
+    df = df.copy()
+
+    df["region"] = df["region"].fillna("Unknown")
+
     result = (df.groupby(group_by)[metric].agg(AGG_FUNCS[agg]).sort_values(ascending=False).head(top_n).round(2))
 
     return {"group_by": group_by, "agg": agg, "metric": metric, "result": result.to_dict()}
@@ -73,15 +78,32 @@ def compare_periods(month_a, month_b, group_by="region"):
     for m in (month_a, month_b):
         if m not in months:
             return {"error": f"month '{m}' not exits, options:{months}"}
-    a = DF[DF["month"] == month_a].groupby(group_by)["sales"].sum()
-    b = DF[DF["month"] == month_b].groupby(group_by)["sales"].sum()
-    diff = (b-a).fillna(0)
+
+    data_a = DF[DF["month"] == month_a].copy()
+    data_b = DF[DF["month"] == month_b].copy()
+
+    data_a[group_by] = data_a[group_by].fillna("Unknown") # region-Nan--> unknow
+    data_b[group_by] = data_b[group_by].fillna("Unknown")
+
+    a = data_a.groupby(group_by)["sales"].sum()
+    b = data_b.groupby(group_by)["sales"].sum()
+
+    a, b = a.align(b, fill_value=0)
+    diff = b - a
     total = diff.sum()
     total_decline = diff[diff < 0].sum()   # Sum of all negative items (negative values)
     total_growth = diff[diff > 0].sum()    # The sum of all rising terms (positive number)
+    pct_change = (diff / a.replace(0, pd.NA) * 100)
     out = pd.DataFrame({
-        "period_a": a, "period_b": b, "change": diff, "pct_change": (diff / a * 100),
-        "share_of_decline_pct": (diff / total_decline * 100).where(diff<0),}).round(2).sort_values("change")
+        "period_a": a,
+        "period_b": b,
+        "change": diff,
+        "pct_change": pct_change,
+        "share_of_decline_pct": (
+            diff / total_decline * 100
+        ).where(diff < 0),
+    })
+    out = out.round(2).sort_values("change")
     out = out.astype(object).where(out.notna(), None)
     return {"month_a": month_a,
             "month_b": month_b, 
@@ -102,6 +124,10 @@ def plot(kind, x, y="sales", filters=None, filename=None):
     df, err = _apply_filters(DF, filters)
     if err:
         return err
+
+    df = df.copy()
+    df[x] = df[x].fillna("Unknown")
+    
     data = df.groupby(x)[y].sum()
     fig, ax = plt.subplots(figsize=(8, 4.5))
     # data.plot(kind=kind, ax=ax, marker="o" if kind == "line" else None)

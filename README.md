@@ -43,7 +43,66 @@ drove the drop, partly offset by growth in North, Northeast and Southwest (+415,
 | `ask.py` | Command-line entry point |
 
 ## Evaluation
-_To be added._
+
+The agent was evaluated on a benchmark of 10 representative sales-analysis queries covering aggregation, period comparison, contribution analysis, time-series analysis, cross-region comparison, and visualization.
+
+Each query was evaluated on four criteria:
+
+- **Tool selection** — whether the agent selected the appropriate analysis tool.
+- **Argument correctness** — whether the generated tool arguments matched the user request.
+- **Execution** — whether the tool call completed successfully.
+- **Final answer correctness** — whether the final response was consistent with the underlying data and tool output.
+
+### Results
+
+| # | Evaluation Query | Tool(s) Used | Result |
+|---|---|---|---|
+| 1 | What is the total sales in December 2025? | `inspect_data`, `group_stats` | PASS |
+| 2 | Which region had the highest total sales? | `group_stats` | PASS |
+| 3 | Which product had the lowest total sales? | `group_stats` | PASS |
+| 4 | How did total sales change from November to December 2025? | `compare_periods` | PASS |
+| 5 | Which regions contributed most to the sales decline in December 2025 compared with November? | `inspect_data`, `compare_periods` | PASS |
+| 6 | Which products contributed most to the sales decline in December 2025 compared with November? | `inspect_data`, `compare_periods` | PASS |
+| 7 | What was the monthly sales trend from July to December 2025? | `time_trend` | PASS |
+| 8 | Compare the sales performance of East and South. | `inspect_data`, `group_stats` | PASS |
+| 9 | Plot monthly sales as a line chart. | `plot` | PASS |
+| 10 | Plot total sales by region as a bar chart. | `plot` | PASS |
+
+**Overall result: 10/10 evaluation queries passed.**
+
+### Evaluation-driven bug fix
+
+The evaluation uncovered a data-consistency issue in region-level analysis. Pandas `groupby()` drops missing grouping values by default, causing records with missing region information to be excluded from regional aggregates. As a result, region-level period comparisons did not initially reconcile with the overall sales totals.
+
+The aggregation pipeline was updated to preserve missing grouping values as an `Unknown` category across `group_stats`, `compare_periods`, and `plot`.
+
+After the fix, grouped results reconcile with the overall totals. For example, sales from November to December 2025 changed by:
+
+- November: `$4,702,643.42`
+- December: `$4,587,847.10`
+- Net change: `-$114,796.32`
+
+The affected evaluation cases were rerun successfully after the fix.
+
+## Example Outputs
+
+The agent can generate visualizations directly from natural-language requests using the deterministic `plot` tool.
+
+### Monthly Sales Trend
+
+**Query:**
+
+> Plot monthly sales as a line chart.
+
+![Monthly Sales Trend](outputs/line_month_sales.png)
+
+### Sales by Region
+
+**Query:**
+
+> Plot total sales by region as a bar chart.
+
+![Sales by Region](outputs/bar_region_sales.png)
 
 ## Notes
 Data is synthetic. Model names change often; edit `MODELS` in `llm_gemini.py`.
